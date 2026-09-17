@@ -1,16 +1,10 @@
-function formatDateTime(date) {
+function formatTime(date) {
   const pad = n => n.toString().padStart(2, '0');
-  // const y = date.getFullYear();
-  // const m = pad(date.getMonth() + 1);
-  // const d = pad(date.getDate());
-  const h = pad(date.getHours());
-  const mi = pad(date.getMinutes());
-  const s = pad(date.getSeconds());
-  // return `${y}-${m}-${d} ${h}:${mi}:${s}`;
-  return `${h}:${mi}:${s}`;
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
 function rLog(that, level, log) {
+  // 日志级别 → 页面配色
   const levelColorMap = {
     "info": "primary",
     "debug": "primary",
@@ -21,11 +15,10 @@ function rLog(that, level, log) {
     "error": "danger",
     "fail": "danger"
   };
-  const now = new Date();
-  const formatedDate = formatDateTime(now);
+  const time = formatTime(new Date());
   let logList = that.data.logList || [];
   logList.push({
-    time: formatedDate,
+    time,
     level: level.toUpperCase(),
     color: levelColorMap[level] || "primary",
     log: log

@@ -1,10 +1,11 @@
 const rLog = require("../../utils/log-record.js");
 const calc = require("../../utils/calc.js");
 
-const CMD_B0 = new Uint8Array([0xFE, 0xFE, 0x09, 0xB0, 0x01, 0x01, 0x00, 0x00]).buffer;
-const CMD_B3 = new Uint8Array([0xFE, 0xFE, 0x09, 0xB3, 0x00, 0x00]).buffer;
-const CMD_B4 = new Uint8Array([0xFE, 0xFE, 0x09, 0xB4, 0x00, 0x00]).buffer;
+const CMD_B0 = new Uint8Array([0xFE, 0xFE, 0x09, 0xB0, 0x01, 0x01, 0x00, 0x00]).buffer; // 握手
+const CMD_B3 = new Uint8Array([0xFE, 0xFE, 0x09, 0xB3, 0x00, 0x00]).buffer; // 关阀
+const CMD_B4 = new Uint8Array([0xFE, 0xFE, 0x09, 0xB4, 0x00, 0x00]).buffer; // 结算确认
 
+// ArrayBuffer 转带空格的十六进制字符串，用于日志输出
 function arrayBufferToHex(buffer) {
   const bytes = new Uint8Array(buffer);
   return Array.from(bytes)
@@ -12,9 +13,7 @@ function arrayBufferToHex(buffer) {
       .join(" ");
 }
 
-/**
- * ArrayBuffer 转为连续的大写 hex 字符串(无空格), 用于帧解析
- */
+// ArrayBuffer 转连续十六进制字符串，便于定位帧头并按偏移取值
 function arrayBufferToHexStr(buffer) {
   const bytes = new Uint8Array(buffer);
   let hex = "";
@@ -25,7 +24,7 @@ function arrayBufferToHexStr(buffer) {
 }
 
 /**
- * 在指定服务的特征值列表中查找写特征和通知特征
+ * 定位写特征与通知特征
  * @returns {Promise<[string|null, string|null, string|null]>} [serviceId, writeCharId, notifyCharId]
  */
 async function findServiceUuid(deviceId, services) {
@@ -66,13 +65,11 @@ Page({
     bleStatusColor: "warn",
     searchTime: 60,
     scrollAnchorId: "",
-    valveOpen: false,      // 阀门是否打开
+    valveOpen: false,
     waterNumber: "",       // 从设备名提取的水号
     lastCost: 0,           // 最近一次消费金额
-    isOperating: false     // 是否正在执行开水/关水操作(防重复点击)
+    isOperating: false     // 操作进行中，用于拦截重复点击
   },
-
-  // ==================== 闪烁动画 ====================
 
   startBlink() {
     if (this.blinkTimer) {
@@ -100,8 +97,6 @@ Page({
       this.setData({ dotOpacity: "" });
     }
   },
-
-  // ==================== BLE 扫描 ====================
 
   async startSearch() {
     if (this.searchTimer) {
@@ -198,11 +193,6 @@ Page({
     }
   },
 
-  // ==================== 设备连接 ====================
-
-  /**
-   * 扫描列表中点击"连接"触发
-   */
   async connectDevice(e) {
     const device = e.currentTarget.dataset.device;
     const deviceId = device.deviceId;
@@ -210,9 +200,7 @@ Page({
     await this._doConnect(deviceId, deviceName, false);
   },
 
-  /**
-   * "连接上次的设备"按钮触发 —— 直连 + 自动开水
-   */
+  // 「连接上次的设备」：跳过扫描直连，并在连接成功后自动开阀
   async connectLastDevice() {
     const lastDeviceId = wx.getStorageSync("lastDeviceId");
     const lastDeviceName = wx.getStorageSync("lastDeviceName") || "";
@@ -225,20 +213,16 @@ Page({
   },
 
   /**
-   * 统一的连接逻辑
-   * @param {string} deviceId
-   * @param {string} deviceName
-   * @param {boolean} autoOpen  连接成功后是否自动开水
+   * autoOpen 为 true 时，连接成功后自动开阀
    */
   async _doConnect(deviceId, deviceName, autoOpen) {
-    // 如果已经连了别的设备, 先断开
     if (this.connectedDeviceId) {
       await this.disconnectDevice();
     }
 
     await this.stopSearch();
 
-    // 初始化蓝牙适配器(connectLastDevice 跳过了扫描, 需要在这里补齐)
+    // 快速重连跳过了扫描流程，需要在这里补齐适配器初始化
     try {
       await wx.openBluetoothAdapter();
     } catch (error) {
@@ -286,14 +270,13 @@ Page({
         waterNumber: waterNumber,
         bleStatus: waterNumber ? "已连接(水号 " + waterNumber + ")" : "已连接",
         bleStatusColor: "success",
-        deviceList: []  // 连接成功后清空设备列表, 防止重复连接
+        deviceList: []  // 清空列表，避免误触重复连接
       });
 
-      // 持久化, 供下次快速重连
+      // 供下次快速重连
       wx.setStorageSync("lastDeviceId", deviceId);
       wx.setStorageSync("lastDeviceName", deviceName);
 
-      // 监听设备主动断开
       wx.onBLEConnectionStateChange((resp) => {
         if (!resp.connected) {
           rLog(this, "info", "设备断开连接 " + this.connectedDeviceId);
@@ -307,10 +290,8 @@ Page({
         }
       });
 
-      // 获取服务 + 特征值
       await this.getDeviceServices(deviceId);
 
-      // 如果是"连接上次设备", 自动开水
       if (autoOpen) {
         setTimeout(async() => {
           await this.doOpen();
@@ -325,14 +306,11 @@ Page({
     }
   },
 
-  /**
-   * 获取设备所有服务, 定位写特征和通知特征, 开启 notify
-   */
+  // 取出设备服务，定位写特征与通知特征并开启 notify
   async getDeviceServices(deviceId) {
     const resp = await wx.getBLEDeviceServices({ deviceId });
     const services = resp.services;
 
-    // 同时查找写特征和通知特征
     const [targetSvcId, writeCharId, notifyCharId] = await findServiceUuid(deviceId, services);
 
     if (!targetSvcId) {
@@ -349,11 +327,9 @@ Page({
       return;
     }
 
-    // 保存写特征, 后续发指令用
     this.writeServiceId = targetSvcId;
     this.writeCharId = writeCharId;
 
-    // 如果有通知特征, 开启 notify 并注册监听
     if (notifyCharId) {
       rLog(this, "info", "已定位通知特征, 开启 notify");
       wx.notifyBLECharacteristicValueChange({
@@ -375,11 +351,7 @@ Page({
     rLog(this, "success", "设备就绪");
   },
 
-  // ==================== notify 数据帧解析 ====================
-
-  /**
-   * BLE 通知回调 —— 解析 FDFD 帧
-   */
+  // 解析设备上报的 FDFD 帧
   _onNotifyValue(resp) {
     const hex = arrayBufferToHexStr(resp.value);
     const idx = hex.indexOf("FDFD");
@@ -389,7 +361,7 @@ Page({
     const cmd = frame.slice(6, 8);
     rLog(this, "debug", "← 设备上报: " + cmd);
 
-    // 如果有等待中的 Promise(doOpen / doClose 中创建), 解析并 resolve
+    // doOpen / doClose 会挂起一个等待中的 Promise，命中期望指令时在此兑现
     if (this._pendingCmd && this._pendingCmd.expectedCmds.includes(cmd)) {
       clearTimeout(this._pendingTimeout);
       const resolve = this._pendingCmd.resolve;
@@ -405,7 +377,7 @@ Page({
       return;
     }
 
-    // 没有等待 Promise 时的单独日志
+    // 无等待方时仅记录日志
     if (cmd === "B0" || cmd === "B1") {
       rLog(this, "info", "[" + cmd + "] 设备握手响应");
     } else if (cmd === "B2") {
@@ -416,9 +388,9 @@ Page({
   },
 
   /**
-   * 等待设备回复特定指令
-   * @param {string[]} expectedCmds  期望的指令列表
-   * @param {number} timeoutMs      超时(毫秒)
+   * 等待设备回复指定指令
+   * @param {string[]} expectedCmds 期望的指令码
+   * @param {number} timeoutMs 超时毫秒数
    * @returns {Promise<{cmd: string, waterHex?: string}>}
    */
   _waitForCmd(expectedCmds, timeoutMs) {
@@ -433,8 +405,6 @@ Page({
       }, timeoutMs);
     });
   },
-
-  // ==================== 开水流程 ====================
 
   async doOpen() {
     if (this.data.isOperating) {
@@ -458,11 +428,10 @@ Page({
     rLog(this, "info", "开始开水流程");
 
     try {
-      // 步骤1: 发送 B0 握手指令
+      // B0 握手
       rLog(this, "info", "→ 发送 B0 握手...");
       this.sendBLEData(CMD_B0);
 
-      // 等待 B0/B1 响应(5 秒超时)
       const handshakeResp = await this._waitForCmd(["B0", "B1"], 5000);
       if (handshakeResp.cmd === "TIMEOUT") {
         rLog(this, "warn", "握手超时, 直接发 B2...");
@@ -470,13 +439,12 @@ Page({
         rLog(this, "info", "[" + handshakeResp.cmd + "] 握手成功");
       }
 
-      // 步骤2: 发送 B2 开阀
+      // B2 开阀，密钥由水号推导
       const b2 = calc.makeB2(this.data.waterNumber);
       const b2Hex = Array.from(b2).map(b => b.toString(16).padStart(2, "0").toUpperCase()).join("");
       rLog(this, "info", "→ 发送 B2 开阀: " + b2Hex);
       this.sendBLEData(b2.buffer);
 
-      // 等待 B2 确认(10 秒超时)
       const openResp = await this._waitForCmd(["B2"], 10000);
       if (openResp.cmd === "TIMEOUT") {
         rLog(this, "warn", "开阀响应超时(可能已经开了)");
@@ -493,8 +461,6 @@ Page({
       this.setData({ isOperating: false });
     }
   },
-
-  // ==================== 关水流程 ====================
 
   async doClose() {
     if (this.data.isOperating) {
@@ -514,11 +480,10 @@ Page({
     rLog(this, "info", "开始关水流程");
 
     try {
-      // 步骤1: 发送 B3 关阀
+      // B3 关阀，设备会在回执里带上本轮用水量
       rLog(this, "info", "→ 发送 B3 关阀...");
       this.sendBLEData(CMD_B3);
 
-      // 等待 B3 响应(带 water_hex)
       const closeResp = await this._waitForCmd(["B3"], 10000);
       let cost = 0;
 
@@ -531,20 +496,18 @@ Page({
         rLog(this, "warn", "关阀响应超时");
       }
 
-      // 步骤2: 发送 B4 确认
+      // B4 结算确认
       rLog(this, "info", "→ 发送 B4 确认...");
       this.sendBLEData(CMD_B4);
 
-      // 短暂等待
+      // 留出设备处理时间
       await new Promise(r => setTimeout(r, 500));
 
-      // 更新状态
       this.setData({
         valveOpen: false,
         lastCost: cost
       });
 
-      // 弹窗显示消费
       wx.showModal({
         title: "本次消费",
         content: "消费金额: ¥" + cost.toFixed(2),
@@ -554,7 +517,6 @@ Page({
         }
       });
 
-      // 断开蓝牙
       await this.disconnectDevice();
       rLog(this, "success", "关水完成, 已断开连接");
 
@@ -566,8 +528,6 @@ Page({
     }
   },
 
-  // ==================== 断连 ====================
-
   async disconnectDevice() {
     const deviceId = this.connectedDeviceId;
     if (!deviceId) return;
@@ -578,7 +538,7 @@ Page({
       rLog(this, "error", "断开连接失败: " + JSON.stringify(err));
     }
 
-    // 清理蓝牙适配器和所有监听, 确保下次扫描时 BLE 栈状态干净
+    // 释放全部监听与适配器，避免下次扫描时 BLE 栈残留旧状态
     this.connectedDeviceId = "";
     this.connectedDeviceName = "";
     wx.offBLEConnectionStateChange();
@@ -595,8 +555,6 @@ Page({
       // 忽略关闭失败
     }
   },
-
-  // ==================== 指令发送 ====================
 
   sendBLEData(data) {
     const that = this;
@@ -627,13 +585,11 @@ Page({
     });
   },
 
-  // ==================== 扫码连接 ====================
-
   /**
-   * 静默扫描指定名称的蓝牙设备 (不更新 UI 设备列表)
+   * 静默扫描指定名称的设备，不写入页面上的设备列表
    * @param {string} targetName 目标设备名
-   * @param {number} timeoutMs  超时(毫秒)
-   * @returns {Promise<object|null>} 找到的设备对象, 或 null
+   * @param {number} timeoutMs 超时毫秒数
+   * @returns {Promise<object|null>} 命中的设备，未找到返回 null
    */
   _scanForDeviceName(targetName, timeoutMs) {
     return new Promise((resolve) => {
@@ -672,7 +628,6 @@ Page({
         }
       });
 
-      // 超时定时器
       scanTimer = setTimeout(() => {
         wx.offBluetoothDeviceFound(onFound);
         wx.stopBluetoothDevicesDiscovery();
@@ -684,9 +639,7 @@ Page({
     });
   },
 
-  /**
-   * 扫码流程: scanCode -> 请求 API -> 静默扫描 -> 连接设备
-   */
+  // 扫码后在本地解析出设备名，再静默扫描并连接
   async scanQRCode() {
     if (this.connectedDeviceId) {
       wx.showToast({ title: "请先断开设备连接", icon: "none" });
@@ -716,7 +669,6 @@ Page({
     const deviceName = `Water${qrCode.slice(4)}`;
     rLog(this, "info", "解析到设备名称: " + deviceName);
 
-    // 初始化蓝牙适配器
     wx.showLoading({ title: "正在搜索设备...", mask: true });
     try {
       await wx.openBluetoothAdapter();
@@ -731,7 +683,6 @@ Page({
       return;
     }
 
-    // 静默扫描 15 秒
     const device = await this._scanForDeviceName(deviceName, 15000);
     wx.hideLoading();
 
@@ -742,11 +693,9 @@ Page({
       return;
     }
 
-    // 连接设备
     await this._doConnect(device.deviceId, device.name || device.localName, false);
   },
 
-  // ==================== 菜单 ====================
   openMenu() {
     if (this.connectedDeviceId) {
       wx.showToast({ title: "请先断开设备连接", icon: "none" });
@@ -766,9 +715,8 @@ Page({
     });
   },
 
-  // ==================== 页面生命周期 ====================
   onUnload() {
-    // 页面销毁时清理定时器和监听
+    // 清理定时器与蓝牙监听
     this.stopBlink();
     if (this.searchTimer) {
       clearInterval(this.searchTimer);
