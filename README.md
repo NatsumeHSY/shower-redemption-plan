@@ -28,6 +28,27 @@
 | 实时运行日志 | 页面内滚动的分级日志（INFO / SUCCESS / WARN / ERROR），便于排查 BLE 异常 |
 | 自动清理 | 关阀结算后自动断开连接并释放蓝牙适配器与所有监听 |
 
+## 界面预览
+
+<p align="center">
+  <img src="screenshots/小程序主页.png" width="230" alt="主页">
+  <img src="screenshots/设备连接方式选择.png" width="230" alt="选择连接方式">
+  <img src="screenshots/小程序正在扫描蓝牙设备.png" width="230" alt="扫描蓝牙设备">
+</p>
+
+<p align="center">
+  <img src="screenshots/设备连接成功.png" width="230" alt="设备连接成功">
+  <img src="screenshots/设备关阀计费.png" width="230" alt="关阀计费">
+</p>
+
+| 步骤 | 界面 | 说明 |
+| --- | --- | --- |
+| 1 | 主页 | 蓝牙状态、设备列表与运行日志集中在一屏 |
+| 2 | 选择连接方式 | 点击「扫码/搜索设备」后弹出，可选「扫码」或「搜索」 |
+| 3 | 扫描蓝牙设备 | 扫描广播名包含 `Wa` 的控水器，60s 倒计时，状态灯呼吸闪烁 |
+| 4 | 连接成功 | 状态栏显示已连接及从设备名提取出的水号 |
+| 5 | 关阀计费 | 停止热水阀后弹窗展示本地换算出的本次消费金额 |
+
 ## 目录结构
 
 ```
@@ -46,6 +67,7 @@ shower-redemption-plan/
 ├── utils/
 │   ├── calc.js                 # 水号提取、设备密钥生成、开阀指令构造、费用计算
 │   └── log-record.js           # 分级日志写入工具
+├── screenshots/                # 界面截图，供 README 预览引用
 ├── sitemap.json                # 小程序索引配置
 ├── project.config.json         # 项目配置（AppID / 编译设置）
 └── .eslintrc.js                # 代码规范配置
