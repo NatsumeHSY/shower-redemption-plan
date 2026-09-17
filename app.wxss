@@ -1,0 +1,30 @@
+@font-face {
+  font-family: "PixelFont";
+  src: url("https://cdn.darkdomain.space/fonts/Pixel.ttf");
+  /* 字重/字形可选配置 */
+  font-weight: normal; /* 400常规, 700粗体 */
+  font-style: normal;  /* italic斜体 */
+  font-display: swap;  /* 网页字体加载优化, 无闪烁 */
+}
+
+page {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  color: white;
+  background-color: #12141A;
+  font-family: "PixelFont", sans-serif;
+}
+
+/* 防止padding/margin导致容器尺寸变化 */
+page, view, text, button, scroll-view {
+  box-sizing: border-box;
+}
+
+.text-primary { color: #0099FF;}
+.text-success { color: #22C55E;}
+.text-warn { color: #F59E0B;}
+.text-danger { color: #EF4444;}
+.background-success { background-color: #22C55E;}
+.background-warn { background-color: #F59E0B;}
+.background-danger { background-color: #EF4444; }

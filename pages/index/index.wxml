@@ -1,0 +1,54 @@
+<navigation-bar title="热水费救赎计划" back="{{false}}" color="white" background="#12141A"></navigation-bar>
+<view class="main">
+  <view class="ble-status">
+    <text>蓝牙状态</text>
+    <view class="status-detail">
+      <view class="status-dot background-{{bleStatusColor}}" style="{{dotOpacity}}"></view>
+      <text class="text-{{bleStatusColor}}">{{bleStatus}}{{bleStatus === '正在扫描' ? '(' + searchTime + 's)' : ''}}</text>
+    </view>
+  </view>
+
+  <view class="card-area">
+    <text>设备列表({{deviceList.length}})</text>
+    <scroll-view class="card-list device-list" scroll-y>
+      <view wx:for="{{deviceList}}" wx:key="deviceId" class="device-item">
+        <view class="device-card">
+          <view class="device-detail">
+            <text style="font-weight: bold;">名称: {{item.name || item.localName || "未知设备"}}</text>
+            <text>MAC: {{item.deviceId}}</text>
+            <text>信号强度: {{item.RSSI}}dB</text>
+          </view>
+          <button class="ctrl-btn btn-quick text-primary" style="width: 60px; height: 25px; font-size: 12px;" data-device="{{item}}" bind:tap="connectDevice">连接</button>
+        </view>
+        <view style="width: 100%; height: 1px; background-color: white; margin-top: 5px;"></view>
+      </view>
+      <view wx:if="{{deviceList.length === 0}}" style="color: #888; text-align: center; padding: 20px;">
+        <text>暂无设备, 请点击"搜索"扫描</text>
+      </view>
+    </scroll-view>
+  </view>
+
+  <view class="card-area">
+    <text>运行日志</text>
+    <scroll-view class="card-list log-list" scroll-y scroll-with-animation scroll-into-view="{{scrollAnchorId}}">
+      <view wx:for="{{logList}}" wx:key="time" class="log-item">
+        <text class="text-{{item.color}}">[{{item.time}}/{{item.level}}] {{item.log}}</text>
+      </view>
+      <view id="bottom-anchor"></view>
+    </scroll-view>
+  </view>
+
+  <view class="btn-area">
+    <!-- 第一行: 重连 / 搜索 -->
+    <view style="width: 100%; display: flex; flex-direction: row; justify-content: space-between; column-gap: 10px;">
+      <button class="ctrl-btn btn-quick text-primary" style="width: 150px; height: 40px" bind:tap="connectLastDevice">连接上次的设备</button>
+      <button class="ctrl-btn btn-scan text-warn" style="width: 150px; height: 40px" bind:tap="openMenu">扫码/搜索设备</button>
+    </view>
+
+    <!-- 第二行: 开阀 / 关阀 -->
+    <view style="width: 100%; display: flex; flex-direction: row; justify-content: space-between; column-gap: 10px;">
+      <button class="ctrl-btn btn-start text-success" style="width: 150px; height: 40px" bind:tap="doOpen">启动热水阀</button>
+      <button class="ctrl-btn btn-stop text-danger" style="width: 150px; height: 40px" bind:tap="doClose">停止热水阀</button>
+    </view>
+  </view>
+</view>
